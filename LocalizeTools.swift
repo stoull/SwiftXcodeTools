@@ -38,8 +38,8 @@ let relativeSourceFolder = "/LocalDebug"
  Those are the regex patterns to recognize localizations.
  */
 let patterns = [
-    "\\(@\"(.*)\"\\)",
-        "GTLLString\\(@\"([\\w\\.\\\\)\\(:（），/“”><：《》_。？\\?%\\*,~ -]+)\"", // GTLLString() 方法
+    "\\(@\"(.*)\"\\)", // @""大范围匹配
+    "GTLLString\\(@\"([\\w\\.\\\\)\\(:（），/“”><：《》_。？\\?%\\*,~ -]+)\"", // GTLLString()方法
 //    "GTLLString\\(@\"(.*)\"",
     "NSLocalized(Format)?String\\(\\s*@?\"([\\w\\.]+)\"", // Swift and Objc Native
     "Localizations\\.((?:[A-Z]{1}[a-z]*[A-z]*)*(?:\\.[A-Z]{1}[a-z]*[A-z]*)*)", // Laurine Calls
