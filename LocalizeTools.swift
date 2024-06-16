@@ -445,8 +445,8 @@ saveResults.forEach { type in
         var zhStrs: [String] = []
         var enStrs: [String] = []
         for v in unused {
-            let cn = "\"\(v)\" = \"\(masterLocalizationFile.keyValue[v] ?? "")\"";
-            let en = "\"\(v)\" = \"\(enLocalizationFile.keyValue[v] ?? "")\"";
+            let cn = "\"\(v)\" = \"\(masterLocalizationFile.keyValue[v] ?? "")\";";
+            let en = "\"\(v)\" = \"\(enLocalizationFile.keyValue[v] ?? "")\";";
             
             zhStrs.append(cn)
             enStrs.append(en)
