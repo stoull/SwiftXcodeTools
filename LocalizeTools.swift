@@ -38,10 +38,10 @@ let relativeSourceFolder = "/LocalDebug"
  Those are the regex patterns to recognize localizations.
  */
 let patterns = [
-    "\\(@\"(.*)\"\\)", // @""大范围匹配
-    "GTLLString\\(@\"([\\w\\.\\\\)\\(:（），/“”><：《》_。？\\?%\\*,~ -]+)\"", // GTLLString()方法
+    "@\"([\\w\\.\\\\)\\(:（），/“”><：《》_。？\\?%\\*,、△~ -]+)\"",// @""大范围匹配
+//    "GTLLString\\(@\"([\\w\\.\\\\)\\(:（），/“”><：《》_。？\\?%\\*,、△~ -]+)\"\\)", // GTLLString()方法
 //    "GTLLString\\(@\"(.*)\"",
-    "NSLocalized(Format)?String\\(\\s*@?\"([\\w\\.]+)\"", // Swift and Objc Native
+//    "NSLocalized(Format)?String\\(\\s*@?\"([\\w\\.]+)\"", // Swift and Objc Native
     "Localizations\\.((?:[A-Z]{1}[a-z]*[A-z]*)*(?:\\.[A-Z]{1}[a-z]*[A-z]*)*)", // Laurine Calls
     "L10n.tr\\(key: \"(\\w+)\"", // SwiftGen generation
     "ypLocalized\\(\"(.*)\"\\)",
@@ -147,7 +147,7 @@ struct LocalizationFiles {
         let lines = string.components(separatedBy: .newlines)
         keyValue = [:]
 
-        let pattern = "\"(.*)\" = \"(.+)\";"
+        let pattern = "\"(.*)\" ?= ?\"(.+)\";"
         let regex = try? NSRegularExpression(pattern: pattern, options: [])
         var ignoredTranslation: [String] = []
 
@@ -155,7 +155,7 @@ struct LocalizationFiles {
             let range = NSRange(location: 0, length: (line as NSString).length)
 
             // Ignored pattern
-            let ignoredPattern = "\"(.*)\" = \"(.+)\"; *\\/\\/ *ignore-same-translation-warning"
+            let ignoredPattern = "\"(.*)\" ?= ?\"(.+)\"; *\\/\\/ *ignore-same-translation-warning"
             let ignoredRegex = try? NSRegularExpression(pattern: ignoredPattern, options: [])
             if let ignoredMatch = ignoredRegex?.firstMatch(in: line,
                                                            options: [],
@@ -365,34 +365,33 @@ enum CheckResultType {
     case untranslated
     case duplication
 
-    var filePath: String {
+    var info: (stringFilePath: String, csvFilePath: String, descrip: String) {
+        var sPath = ""
+        var cPath = ""
+        var des = ""
         switch self {
         case .unused:
-            return checkResultFolder + "/unused.strings"
+            sPath = checkResultFolder + "/unused.strings"
+            cPath = checkResultFolder + "/工程中没有用到的翻译.csv"
+            des = "======这里记录的是在工程里没有引用的翻译=====\n"
         case .missing:
-            return checkResultFolder + "/missing.strings"
+            sPath =  checkResultFolder + "/missing.strings"
+            cPath = checkResultFolder + "/missing.csv"
+            des = "======这里记录的是在工程里有引用，但在主文件中没有找到的翻译=====\n"
         case .redundant:
-            return checkResultFolder + "/redundant.strings"
+            sPath =  checkResultFolder + "/redundant.strings"
+            cPath = checkResultFolder + "/redundant.csv"
+            des = "======这里记录的是有多次引用的翻译=====\n"
         case .untranslated:
-            return checkResultFolder + "/untranslated.strings"
+            sPath =  checkResultFolder + "/untranslated.strings"
+            cPath = checkResultFolder + "/untranslated.csv"
+            des = "======但在主文件中有翻译，但在其它语言中没有的翻译=====\n"
         case .duplication:
-            return checkResultFolder + "/duplication.strings"
+            sPath =  checkResultFolder + "/duplication.strings"
+            cPath = checkResultFolder + "/duplication.csv"
+            des = "======但在主文件中有翻译，并且有重复key=====\n"
         }
-    }
-    
-    var des: String {
-        switch self {
-        case .unused:
-            return "======这里记录的是在工程里没有引用的翻译=====\n"
-        case .missing:
-            return "======这里记录的是在工程里有引用，但在主文件中没有找到的翻译=====\n"
-        case .redundant:
-            return "======这里记录的是有多次引用的翻译=====\n"
-        case .untranslated:
-            return "======但在主文件中有翻译，但在其它语言中没有的翻译=====\n"
-        case .duplication:
-            return "======但在主文件中有翻译，并且有重复key=====\n"
-        }
+        return (sPath, cPath, des)
     }
 }
 
@@ -409,7 +408,7 @@ func cleanResultFolder() {
         
         try FileManager.default.createDirectory(atPath: checkResultFolder, withIntermediateDirectories: true)
         for type in saveResults {
-            FileManager.default.createFile(atPath: type.filePath, contents: type.des.data(using: .utf8)!)
+            FileManager.default.createFile(atPath: type.info.stringFilePath, contents: type.info.descrip.data(using: .utf8)!)
         }
     } catch {
         print("结果目录清空失败: \(checkResultFolder) error: \(error)")
@@ -418,7 +417,7 @@ func cleanResultFolder() {
 
 // 将没有翻译的key写入文件
 func wirteArrayToFile(_ sArray: Set<String>, type: CheckResultType) {
-    let fileURL = URL(fileURLWithPath: type.filePath)
+    let fileURL = URL(fileURLWithPath: type.info.stringFilePath)
     do {
         let aStr = sArray.joined(separator: "\n")
         try aStr.write(to: fileURL, atomically: true, encoding: .utf8)
@@ -433,6 +432,18 @@ cleanResultFolder()
 // en
 let enLocalizationFile = LocalizationFiles(name: "en")
 
+// 转义CSV中的特殊字符 To escape the special characters in the CSV
+func escapeSpecialToCSVString(_ tStr: String) -> String {
+    var toStr = tStr
+    if toStr.contains(",") {
+        toStr = "\"\(toStr)\""
+    }
+    if toStr.contains("\"") {
+        toStr = "\"\(toStr.replacingOccurrences(of: "\"", with: "\"\""))\""
+    }
+    return toStr
+}
+
 // 写入文件
 saveResults.forEach { type in
     var resultStrs: Set<String> = []
@@ -442,22 +453,71 @@ saveResults.forEach { type in
         
         var resultString = ""
         
+        var csvData_used = [["key", "中文", "英文"]]
+        var csvData_unused = [["key", "中文", "英文"]]
         var zhStrs: [String] = []
         var enStrs: [String] = []
         for v in unused {
-            let cn = "\"\(v)\" = \"\(masterLocalizationFile.keyValue[v] ?? "")\";";
-            let en = "\"\(v)\" = \"\(enLocalizationFile.keyValue[v] ?? "")\";";
+            let cnValue = masterLocalizationFile.keyValue[v] ?? ""
+            let enValue = enLocalizationFile.keyValue[v] ?? ""
+            
+            let cn = "\"\(v)\" = \"\(cnValue)\";";
+            let en = "\"\(v)\" = \"\(enValue)\";";
             
             zhStrs.append(cn)
             enStrs.append(en)
+            
+            let csv_v = escapeSpecialToCSVString(v)
+            let csv_cnValue = escapeSpecialToCSVString(cnValue)
+            let csv_enValue = escapeSpecialToCSVString(enValue)
+            
+            let unsed_arr = [csv_v, csv_cnValue, csv_enValue]
+            csvData_unused.append(unsed_arr)
         }
         
+        // 写入.string文件
         let zhString = zhStrs.joined(separator: "\n")
         resultString = zhString + "\n\n\n\n\n ======= 以下是英文未用到的 ======= \n\n\n\n"
         let enString = enStrs.joined(separator: "\n")
         resultString = resultString + enString
+        try? resultString.write(toFile: CheckResultType.unused.info.stringFilePath, atomically: true, encoding: .utf8)
         
-        try? resultString.write(toFile: CheckResultType.unused.filePath, atomically: true, encoding: .utf8)
+        // 写入CSV文件
+        let masterUsedKeys = masterKeys.subtracting(unused)
+        for v in masterUsedKeys {
+            var cnValue = masterLocalizationFile.keyValue[v] ?? ""
+            var enValue = enLocalizationFile.keyValue[v] ?? ""
+            let csv_v = escapeSpecialToCSVString(v)
+            let csv_cnValue = escapeSpecialToCSVString(cnValue)
+            let csv_enValue = escapeSpecialToCSVString(enValue)
+            let used_arr = [csv_v, csv_cnValue, csv_enValue]
+            csvData_used.append(used_arr)
+        }
+        
+        // 写入中文整理过后的.strings
+        var masterArrays: [String] = []
+        for (key,value) in masterLocalizationFile.keyValue {
+            let str = "\"\(key)\" = \"\(value)\";";
+            masterArrays.append(str)
+        }
+        let masterString = masterArrays.joined(separator: "\n")
+        // 写入.string文件
+        try? masterString.write(toFile: checkResultFolder + "/中文整理过后的.strings", atomically: true, encoding: .utf8)
+        
+        let csvString_used = csvData_used.map { $0.joined(separator: ",") }.joined(separator: "\n")
+        let csvString_unused = csvData_unused.map { $0.joined(separator: ",") }.joined(separator: "\n")
+
+        try? csvString_used.write(toFile: checkResultFolder + "/移除工程中没有用到的翻译后的翻译.csv", atomically: true, encoding: .utf8)
+        try? csvString_unused.write(toFile: CheckResultType.unused.info.csvFilePath, atomically: true, encoding: .utf8)
+        
+//        do {
+//            try? csvString_used.write(toFile: "/移除工程中没有用到的翻译后的翻译.csv", atomically: true, encoding: .utf8)
+//            try? csvString_unused.write(toFile: CheckResultType.unused.info.csvFilePath, atomically: true, encoding: .utf8)
+//            print("写入 CSV 文件成功")
+//        } catch {
+//            print("写入 CSV 文件失败: \(error)")
+//        }
+        
     case .missing:
         resultStrs = unused
     case .redundant:
