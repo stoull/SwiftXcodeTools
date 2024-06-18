@@ -11,7 +11,7 @@
 #### 一， 找出项目中没有引用到的翻译文本
 
 1. 将`LocalizeTools.swift`拖到ShineTools工程根目录下
-2. 在终端运行`swift LocalizeTools.swift`，对应没有用到的翻译文件会生成到目录`/0CheckResult`下,有如下文件
+2. 在终端运行`swift LocalizeTools.swift`，对应没有用到的翻译文件会生成到目录`/0CheckResult`下,有如下文件：
 
 	* `中文整理过后的.strings` : 记录的是原zh文件中移除空格，注释，去重后的所有翻译keyvalue对
 	* `整理过(剔除没有引用的翻译)后_cn.strings` : 记录的是原zh文件中移除空格，注释，去重，及移除没有用到的keyvalue后的翻译keyvalue对
