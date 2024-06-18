@@ -34,14 +34,16 @@ let relativeSourceFolder = "/LocalDebug"
 
 // GTLLString\(@\"([\w\.\(\)\{\}:（），/“”><：《》_。？\?%\*-\+,~ ， -]+)\"\)
 // @\"([\w\.\(\)\{\}:（），/“”><：《》_。？\?%\*-\+,~ ， -]+)\"
+// GTLLString\\(@\"(.*?)\"\\)
 /*
  Those are the regex patterns to recognize localizations.
  */
 let patterns = [
-    "@\"([\\w\\.\\\\)\\(:（），/“”><：《》_。？\\?%\\*,、△~ -]+)\"",// @""大范围匹配
-//    "GTLLString\\(@\"([\\w\\.\\\\)\\(:（），/“”><：《》_。？\\?%\\*,、△~ -]+)\"\\)", // GTLLString()方法
-//    "GTLLString\\(@\"(.*)\"",
-//    "NSLocalized(Format)?String\\(\\s*@?\"([\\w\\.]+)\"", // Swift and Objc Native
+//    "@\"(.*?)\"",// @""大范围匹配
+    "GTLLString\\(@\"(.*?)\"\\)", // GTLLString()方法匹配
+    ",@\"(?=.*?[\\u4e00-\\u9fa5]).+?\"",
+    "(?<=@\\[)@\"((?=.*?[\\u4e00-\\u9fa5]).+?)\"(?=,|])",
+    "NSLocalized(Format)?String\\(\\s*@?\"([\\w\\.]+)\"", // Swift and Objc Native
     "Localizations\\.((?:[A-Z]{1}[a-z]*[A-z]*)*(?:\\.[A-Z]{1}[a-z]*[A-z]*)*)", // Laurine Calls
     "L10n.tr\\(key: \"(\\w+)\"", // SwiftGen generation
     "ypLocalized\\(\"(.*)\"\\)",
@@ -455,6 +457,8 @@ saveResults.forEach { type in
         
         var csvData_used = [["key", "中文", "英文"]]
         var csvData_unused = [["key", "中文", "英文"]]
+        var used_master_keyVaules: [String: String] = [:]
+        var used_en_keyVaules: [String: String] = [:]
         var zhStrs: [String] = []
         var enStrs: [String] = []
         for v in unused {
@@ -483,10 +487,14 @@ saveResults.forEach { type in
         try? resultString.write(toFile: CheckResultType.unused.info.stringFilePath, atomically: true, encoding: .utf8)
         
         // 写入CSV文件
-        let masterUsedKeys = masterKeys.subtracting(unused)
-        for v in masterUsedKeys {
+        let usedMasterKey = masterKeys.subtracting(unused)
+        for v in usedMasterKey {
             var cnValue = masterLocalizationFile.keyValue[v] ?? ""
             var enValue = enLocalizationFile.keyValue[v] ?? ""
+            
+            used_master_keyVaules[v] = cnValue
+            used_en_keyVaules[v] = enValue
+            
             let csv_v = escapeSpecialToCSVString(v)
             let csv_cnValue = escapeSpecialToCSVString(cnValue)
             let csv_enValue = escapeSpecialToCSVString(enValue)
@@ -495,29 +503,35 @@ saveResults.forEach { type in
         }
         
         // 写入中文整理过后的.strings
-        var masterArrays: [String] = []
+        var masterArrays: [String] = ["//     ============这里记录的是原zh文件中移除空格，注释，去重后的所有翻译keyvalue对========="]
         for (key,value) in masterLocalizationFile.keyValue {
             let str = "\"\(key)\" = \"\(value)\";";
             masterArrays.append(str)
         }
         let masterString = masterArrays.joined(separator: "\n")
-        // 写入.string文件
         try? masterString.write(toFile: checkResultFolder + "/中文整理过后的.strings", atomically: true, encoding: .utf8)
+        
+        // 写入整理过后剔除没有用的的.strings
+        var cnArrays: [String] = ["//     ============这里记录的是原zh文件中移除空格，注释，去重，及移除没有用到的keyvalue后的翻译keyvalue对========="]
+        var enArrays: [String] = ["//     ============这里记录的是原zh文件中移除空格，注释，去重，及移除没有用到的keyvalue后的翻译keyvalue对========="]
+        for (key,value) in used_master_keyVaules {
+            let str = "\"\(key)\" = \"\(value)\";";
+            cnArrays.append(str)
+        }
+        for (key,value) in used_en_keyVaules {
+            let str = "\"\(key)\" = \"\(value)\";";
+            enArrays.append(str)
+        }
+        let cnArrayString = cnArrays.joined(separator: "\n")
+        let enArrayString = enArrays.joined(separator: "\n")
+        try? cnArrayString.write(toFile: checkResultFolder + "/整理过(剔除没有引用的翻译)后_cn.strings", atomically: true, encoding: .utf8)
+        try? enArrayString.write(toFile: checkResultFolder + "/整理过(剔除没有引用的翻译)后_en.strings", atomically: true, encoding: .utf8)
         
         let csvString_used = csvData_used.map { $0.joined(separator: ",") }.joined(separator: "\n")
         let csvString_unused = csvData_unused.map { $0.joined(separator: ",") }.joined(separator: "\n")
 
         try? csvString_used.write(toFile: checkResultFolder + "/移除工程中没有用到的翻译后的翻译.csv", atomically: true, encoding: .utf8)
         try? csvString_unused.write(toFile: CheckResultType.unused.info.csvFilePath, atomically: true, encoding: .utf8)
-        
-//        do {
-//            try? csvString_used.write(toFile: "/移除工程中没有用到的翻译后的翻译.csv", atomically: true, encoding: .utf8)
-//            try? csvString_unused.write(toFile: CheckResultType.unused.info.csvFilePath, atomically: true, encoding: .utf8)
-//            print("写入 CSV 文件成功")
-//        } catch {
-//            print("写入 CSV 文件失败: \(error)")
-//        }
-        
     case .missing:
         resultStrs = unused
     case .redundant:
