@@ -43,6 +43,8 @@ let patterns = [
     "GTLLString\\(@\"(.*?)\"\\)", // GTLLString()方法匹配
     ",@\"(?=.*?[\\u4e00-\\u9fa5]).+?\"",
     "(?<=@\\[)@\"((?=.*?[\\u4e00-\\u9fa5]).+?)\"(?=,|])",
+    "NSString stringWithFormat:@\"(?=.*?[\\u4e00-\\u9fa5]).{3,}?\"",
+    "NSString stringWithFormat:@\"((?=.*?[^@%d_])[a-zA-Z0-9%d_]{6,})?\"",
     "NSLocalized(Format)?String\\(\\s*@?\"([\\w\\.]+)\"", // Swift and Objc Native
     "Localizations\\.((?:[A-Z]{1}[a-z]*[A-z]*)*(?:\\.[A-Z]{1}[a-z]*[A-z]*)*)", // Laurine Calls
     "L10n.tr\\(key: \"(\\w+)\"", // SwiftGen generation
@@ -285,7 +287,23 @@ while let swiftFileLocation = enumerator?.nextObject() as? String {
 var masterKeys = Set(masterLocalizationFile.keyValue.keys)
 let usedKeys = Set(localizedStrings)
 let ignored = Set(ignoredFromUnusedKeys)
-let unused = masterKeys.subtracting(usedKeys).subtracting(ignored)
+var unused = masterKeys.subtracting(usedKeys).subtracting(ignored)
+
+var specialUsedKey: Set<String> = []
+for u in usedKeys {
+    // 如keyStr = [NSString stringWithFormat:@"SPH_New_%d_%d",address,bit]; 引用的特殊处理
+    if u.contains("%d") && u != "%d_%d" {
+        let dPattern = u.replacingOccurrences(of: "%d", with: "\\d+")
+        for v in masterKeys {
+            if let regex = try? NSRegularExpression(pattern: dPattern),
+               let matches = regex.firstMatch(in: v, range: NSRange(v.startIndex..., in: v)) {
+                specialUsedKey.insert(v)
+            }
+        }
+    }
+}
+unused = unused.subtracting(specialUsedKey)
+
 let untranslated = usedKeys.subtracting(masterKeys)
 
 // Here generate Xcode regex Find and replace script to remove dead keys all at once!
