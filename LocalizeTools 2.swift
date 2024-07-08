@@ -39,11 +39,12 @@ let relativeSourceFolder = "/LocalDebug"
  Those are the regex patterns to recognize localizations.
  */
 let patterns = [
-    //    "@\"(.*?)\"",// @""大范围匹配
+//    "@\"(.*?)\"",// @""大范围匹配
     "GTLLString\\(@\"(.*?)\"\\)", // GTLLString()方法匹配
-    "(,|\\[)@\"((?=.*[\\p{script=Han}]).{3,}?)\"",
-    "NSString stringWithFormat:@\"((?=.*%d)[\\p{script=Han}].{4,}?)\"", // 处理[NSString stringwithFormt中带中文的引用，如：[NSString stringWithFormat:@"模块%d风扇",i+1]
-    "NSString stringWithFormat:@\"((?=.*?[^@%d_]{5,})[a-zA-Z0-9%d_]{6,}?)\"", // 处理[NSString stringwithFormt中带英文的引用，如：NSString stringWithFormat:@\"((?=.*?[^@%d_]{4,})[a-zA-Z0-9%d_]{6,}?)\"
+    ",@\"(?=.*?[\\u4e00-\\u9fa5]).+?\"",
+    "(?<=@\\[)@\"((?=.*?[\\u4e00-\\u9fa5]).+?)\"(?=,|])",
+    "NSString stringWithFormat:@\"(?=.*?[\\u4e00-\\u9fa5]).{3,}?\"",
+    "NSString stringWithFormat:@\"((?=.*?[^@%d_])[a-zA-Z0-9%d_]{6,})?\"",
     "NSLocalized(Format)?String\\(\\s*@?\"([\\w\\.]+)\"", // Swift and Objc Native
     "Localizations\\.((?:[A-Z]{1}[a-z]*[A-z]*)*(?:\\.[A-Z]{1}[a-z]*[A-z]*)*)", // Laurine Calls
     "L10n.tr\\(key: \"(\\w+)\"", // SwiftGen generation
@@ -293,6 +294,14 @@ for u in usedKeys {
     // 如keyStr = [NSString stringWithFormat:@"SPH_New_%d_%d",address,bit]; 引用的特殊处理
     if u.contains("%d") && u != "%d_%d" {
         let dPattern = u.replacingOccurrences(of: "%d", with: "\\d+")
+        for v in masterKeys {
+            if let regex = try? NSRegularExpression(pattern: dPattern),
+               let matches = regex.firstMatch(in: v, range: NSRange(v.startIndex..., in: v)) {
+                specialUsedKey.insert(v)
+            }
+        }
+    } else if u.contains("%@") {
+        let dPattern = u.replacingOccurrences(of: "%@", with: "\\d+")
         for v in masterKeys {
             if let regex = try? NSRegularExpression(pattern: dPattern),
                let matches = regex.firstMatch(in: v, range: NSRange(v.startIndex..., in: v)) {
